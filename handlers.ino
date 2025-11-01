@@ -1,6 +1,5 @@
-#include "screen_logger.h" // --- NEW --- For M5StickC screen logging
-
 // --- This file holds all the Web Server and WebSocket logic ---
+#include "ui_manager.h" // For DisplayMode and currentMode
 
 // ---------------- HANDLERS ----------------
 void handleRoot(AsyncWebServerRequest *request) {
@@ -72,7 +71,7 @@ void onWsEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventT
         M5.Lcd.println("Msg Updated:");
         M5.Lcd.setTextColor(WHITE);
         M5.Lcd.println(currentMsg);
-        logToScreen("Msg: " + currentMsg);
+        Serial.println("Text message updated via WebSocket");
 
       } else if (type == "clear_display") {
         currentMsg = ""; 
@@ -81,7 +80,7 @@ void onWsEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventT
   matrix.displaySuspend(true);
   matrix.displayClear();
   matrix.displayReset();
-        logToScreen("Display Cleared!");
+        Serial.println("Display cleared via WebSocket");
 
       // --- CHANGED --- Added Snake Mode
       } else if (type == "set_mode") {
@@ -112,7 +111,7 @@ void onWsEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventT
         M5.Lcd.setCursor(0, 100);
         M5.Lcd.setTextColor(CYAN);
         M5.Lcd.printf("Mode: %s\n", modeStr.c_str());
-        logToScreen("Mode: " + modeStr);
+        Serial.println("Mode changed to: " + modeStr);
 
       } else if (type == "pixel_update") { 
         int x_web = doc["x"].as<int>();
@@ -154,7 +153,7 @@ void onWsEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventT
           matrix.displaySuspend(false);
         }
       } else if (type == "reboot") {
-        logToScreen("Rebooting...");
+        Serial.println("Rebooting device...");
         delay(1000);
         ESP.restart();
       }

@@ -1,6 +1,5 @@
 // --- Holds all the logic for the Snake game ---
 #include "snake_game.h"
-#include "screen_logger.h" // --- NEW --- For M5StickC screen logging
 
 // Game settings
 #define GAME_SPEED 150 // Milliseconds between snake moves
@@ -26,7 +25,7 @@ void resetGame() {
   currentDirection = DIR_RIGHT;
   isGameOver = false;
   spawnFood();
-  logToScreen("SNAKE GAME!");
+  Serial.println("Snake game started!");
   // Draw first frame immediately to avoid residual text/graphics
   drawSnake();
   matrix.displayAnimate();
@@ -84,14 +83,14 @@ void moveSnake() {
   // 1. Wall collision
   if (newHead.x < 0 || newHead.x >= MATRIX_WIDTH || newHead.y < 0 || newHead.y >= MATRIX_HEIGHT) {
     isGameOver = true;
-    logToScreen("Game Over!");
+    Serial.println("Game Over - Wall collision!");
     return;
   }
   // 2. Self collision
   for (int i = 0; i < snakeLength; i++) {
     if (newHead.x == snakeBody[i].x && newHead.y == snakeBody[i].y) {
       isGameOver = true;
-      logToScreen("Game Over!");
+      Serial.println("Game Over - Self collision!");
       return;
     }
   }
@@ -106,7 +105,7 @@ void moveSnake() {
   // --- Check for Food ---
   if (newHead.x == food.x && newHead.y == food.y) {
     snakeLength++; // Grow snake
-    logToScreen("Score: " + String(snakeLength - 3));
+    Serial.println("Score: " + String(snakeLength - 3));
     spawnFood(); // Spawn new food
   }
 }

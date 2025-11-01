@@ -9,8 +9,7 @@
 #include <NimBLEDevice.h>
 #include "webpage.h" 
 #include "snake_game.h"  // --- NEW --- To share game functions
-#include "screen_logger.h" // --- NEW --- For M5StickC screen logging
-#include "screen_os.h" // --- NEW --- On-device OS UI
+#include "ui_manager.h" // --- NEW --- For M5StickC UI system
 
 // ---------------- LED MATRIX SETUP ----------------
 #define HARDWARE_TYPE MD_MAX72XX::ICSTATION_HW
@@ -28,13 +27,10 @@ const char* password = "Unique@1011";
 // ---------------- WEB SERVER & WEBSOCKETS ----------------
 AsyncWebServer server(80); 
 AsyncWebSocket ws("/ws"); 
+#include "input_events.h"
 
 // ---------------- GLOBAL SETTINGS ----------------
-enum DisplayMode {
-  MODE_TEXT,
-  MODE_GRAPHICS,
-  MODE_SNAKE // --- NEW ---
-};
+// DisplayMode enum is declared in ui_manager.h
 DisplayMode currentMode = MODE_TEXT;
 
 String currentMsg = "WELCOME TO SRC - ";
@@ -67,10 +63,7 @@ extern void onWsEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, Aw
 void setup() {
   M5.begin();
   M5.Lcd.setRotation(3);
-  initScreenLogger();
-  setLoggerEnabled(false); // OS owns the screen now
-  // OS boot screen
-  initOS();
+  initUI(); // Initialize the UI system
   
   Serial.begin(115200);
   WiFi.mode(WIFI_STA);
@@ -83,13 +76,16 @@ void setup() {
     timeout++;
   }
 
-  // OS will display status bar and home; keep Serial for debug only
   if (WiFi.status() == WL_CONNECTED) {
     Serial.println("\nConnected!");
     Serial.print("IP Address: "); Serial.println(WiFi.localIP());
+    setWiFiConnected(true);
+  } else {
+    Serial.println("Wi-Fi Failed!");
+    setWiFiConnected(false);
   }
 
-  // --- NEW --- Start Bluetooth
+  // Start Bluetooth
   initBLE();
 
   matrix.begin();
@@ -102,20 +98,89 @@ void setup() {
   matrix.displayClear();
   matrix.displayText(currentMsg.c_str(), currentAlign, currentSpeed, currentPause, currentEffect, currentEffectOut);
 
-     initializePixelBuffer();
+  initializePixelBuffer();
 
   server.on("/", HTTP_GET, handleRoot); 
   ws.onEvent(onWsEvent); 
   server.addHandler(&ws); 
   server.begin();
 
-  // OS loop will render UI
+  Serial.println("Web Server Ready!");
 }
 
 // ---------------- LOOP ----------------
+volatile uint32_t gInputEvents = 0; // defined here
+static void processInputEvents() {
+  uint32_t ev = gInputEvents;
+  if (!ev) return;
+  gInputEvents = 0; // clear all captured events
+
+  // Top-level
+  if (ev & EV_HOME) uiHome();
+  if (ev & EV_MENU) uiMenu();
+
+  // Menus (Apps/Power/Settings/Text Settings)
+  if (currentUIState == UI_APPS || currentUIState == UI_POWER_MENU ||
+      currentUIState == UI_SETTINGS || currentUIState == UI_TEXT_SETTINGS) {
+    if (ev & EV_NAV_UP)   uiNavigateUp();
+    if (ev & EV_NAV_DOWN) uiNavigateDown();
+    if (ev & EV_SELECT)   uiSelect();
+    if (ev & EV_BACK)     uiBack();
+    // Value adjustments everywhere via X/Y
+    if (ev & EV_INC)      uiIncrease();
+    if (ev & EV_DEC)      uiDecrease();
+  }
+
+  // App running
+  if (currentUIState == UI_APP_RUNNING) {
+    if (ev & EV_BACK) uiBack();
+    // Open text settings from select while in text mode
+    if ((ev & EV_SELECT) && currentMode == MODE_TEXT) {
+      openTextSettings();
+      return;
+    }
+    if (currentMode == MODE_SNAKE) {
+      extern bool isGameOver;
+      if ((ev & EV_SNAKE_RESTART) && isGameOver) {
+        resetGame();
+      } else {
+        if (ev & EV_SNAKE_UP)    setSnakeDirection(DIR_UP);
+        if (ev & EV_SNAKE_DOWN)  setSnakeDirection(DIR_DOWN);
+        if (ev & EV_SNAKE_LEFT)  setSnakeDirection(DIR_LEFT);
+        if (ev & EV_SNAKE_RIGHT) setSnakeDirection(DIR_RIGHT);
+      }
+    }
+  }
+}
+unsigned long lastBatteryUpdate = 0;
+const unsigned long BATTERY_UPDATE_INTERVAL = 30000; // Update every 30 seconds
+
 void loop() {
   M5.update();
-  osLoop();
+  // Map onboard M5 buttons to events
+  static bool pwrLongSent = false;
+  if (M5.BtnA.wasPressed()) postInputEvent(EV_NAV_UP);
+  // In Settings/TextSettings, BtnB short = Back; otherwise Down
+  if (M5.BtnB.wasPressed()) {
+    if (currentUIState == UI_SETTINGS || currentUIState == UI_TEXT_SETTINGS) postInputEvent(EV_BACK);
+    else postInputEvent(EV_NAV_DOWN);
+  }
+  if (M5.BtnA.pressedFor(700)) postInputEvent(EV_HOME);
+  if (M5.BtnB.pressedFor(700)) postInputEvent(EV_BACK);
+  if (M5.BtnPWR.wasPressed()) postInputEvent(EV_SELECT);
+  if (M5.BtnPWR.pressedFor(1200)) { if (!pwrLongSent) { postInputEvent(EV_MENU); pwrLongSent = true; } }
+  if (!M5.BtnPWR.isPressed()) pwrLongSent = false;
+
+  processInputEvents();
+  
+  // Update battery level periodically
+  unsigned long now = millis();
+  if (now - lastBatteryUpdate >= BATTERY_UPDATE_INTERVAL) {
+    updateBatteryLevel();
+    lastBatteryUpdate = now;
+  }
+  
+  // UI now updates only on events to avoid flicker; no periodic full redraw here
 
   switch (currentMode) {
     case MODE_TEXT:

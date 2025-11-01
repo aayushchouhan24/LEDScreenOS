@@ -10,6 +10,7 @@
 #include "webpage.h" 
 #include "snake_game.h"  // --- NEW --- To share game functions
 #include "screen_logger.h" // --- NEW --- For M5StickC screen logging
+#include "screen_os.h" // --- NEW --- On-device OS UI
 
 // ---------------- LED MATRIX SETUP ----------------
 #define HARDWARE_TYPE MD_MAX72XX::ICSTATION_HW
@@ -66,8 +67,10 @@ extern void onWsEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, Aw
 void setup() {
   M5.begin();
   M5.Lcd.setRotation(3);
-  initScreenLogger(); // --- NEW --- Initialize the screen logger
-  logToScreen("Connecting Wi-Fi...");
+  initScreenLogger();
+  setLoggerEnabled(false); // OS owns the screen now
+  // OS boot screen
+  initOS();
   
   Serial.begin(115200);
   WiFi.mode(WIFI_STA);
@@ -80,14 +83,10 @@ void setup() {
     timeout++;
   }
 
+  // OS will display status bar and home; keep Serial for debug only
   if (WiFi.status() == WL_CONNECTED) {
     Serial.println("\nConnected!");
     Serial.print("IP Address: "); Serial.println(WiFi.localIP());
-    logToScreen("Wi-Fi Connected!");
-    logToScreen("SSID: " + String(ssid));
-    logToScreen("IP: " + WiFi.localIP().toString());
-  } else {
-    logToScreen("Wi-Fi Failed!");
   }
 
   // --- NEW --- Start Bluetooth
@@ -110,14 +109,13 @@ void setup() {
   server.addHandler(&ws); 
   server.begin();
 
-  logToScreen("Web Server Ready!");
-  logToScreen("IP: " + WiFi.localIP().toString());
+  // OS loop will render UI
 }
 
 // ---------------- LOOP ----------------
 void loop() {
   M5.update();
-  handleScreenScroll();
+  osLoop();
 
   switch (currentMode) {
     case MODE_TEXT:

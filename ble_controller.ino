@@ -1,6 +1,7 @@
 #include <NimBLEDevice.h>
 #include "snake_game.h" // For snake controls and restart
 #include "screen_logger.h" // Minimal on-screen status only
+#include "screen_os.h" // OS input routing
 
 static NimBLEAddress addr("a0:5a:59:70:72:a3", 0);
 uint16_t lastBtns;
@@ -21,39 +22,21 @@ void onInput(NimBLERemoteCharacteristic*, uint8_t* d, size_t l, bool) {
   Serial.printf("Raw Hex: d[4]=0x%02X, d[5]=0x%02X\n", d[4], d[5]);
 
   switch (d[4]) {
-    case 0x00: Serial.println("UP");    break;
-    case 0x22: Serial.println("RIGHT"); break;
-    case 0x44: Serial.println("DOWN");  break;
-    case 0x66: Serial.println("LEFT");  break;
+    case 0x00: Serial.println("UP");    osOnDpad(0x00); break;
+    case 0x22: Serial.println("RIGHT"); osOnDpad(0x22); break;
+    case 0x44: Serial.println("DOWN");  osOnDpad(0x44); break;
+    case 0x66: Serial.println("LEFT");  osOnDpad(0x66); break;
   }
 
   if (d[5] & 0x01) { Serial.println("A"); screenScrollUp(); }
-  if (d[5] & 0x02) { Serial.println("B"); screenScrollDown(); }
-  if (d[5] & 0x08) { Serial.println("X");
-    // Cycle modes: Text -> Graphics -> Snake -> Text (with engine hard reset)
-    matrix.displaySuspend(true);
-    matrix.displayClear();
-    matrix.displayReset();
-    if (currentMode == MODE_TEXT) {
-      currentMode = MODE_GRAPHICS;
-      logToScreen("Mode: Graphics");
-      renderPixelBufferToMatrix();
-      matrix.displaySuspend(false);
-    } else if (currentMode == MODE_GRAPHICS) {
-      currentMode = MODE_SNAKE;
-      logToScreen("Mode: Snake");
-      matrix.displaySuspend(false);
-      resetGame(); // draws first frame now
-    } else {
-      currentMode = MODE_TEXT;
-      logToScreen("Mode: Text");
-      matrix.displaySuspend(false);
-      if (currentMsg != "") {
-        matrix.displayText(currentMsg.c_str(), currentAlign, currentSpeed, currentPause, currentEffect, currentEffectOut);
-      }
-    }
+  if (d[5] & 0x02) { Serial.println("B"); osOnButtonB(); }
+  if (d[5] & 0x08) { Serial.println("X"); osOnButtonX(); }
+  if (d[5] & 0x10) { Serial.println("Y"); osOnButtonY(); }
+  // Menu/select mapping from extended byte (d[6]) if present
+  if (l >= 7) {
+    if (d[6] & 0x08) { Serial.println("MENU"); osOnMenu(); }
+    if (d[6] & 0x04) { Serial.println("HOME/SELECT"); osOnHome(); }
   }
-  if (d[5] & 0x10) { Serial.println("Y"); if (isGameOver) resetGame(); }
 
   // Snake control only in snake mode
   if (currentMode == MODE_SNAKE) {
@@ -79,6 +62,8 @@ void initBLE() {
     logToScreen("BLE Connection Failed!");
     return;
   }
+
+  isConnected = true;
 
   logToScreen("Controller Connected!");
   Serial.println("Controller Connected, searching for HID service...");
@@ -156,3 +141,6 @@ void initBLE() {
     logToScreen("HID Char not found!");
   }
 }
+
+// OS top bar needs BLE status
+bool isBLEConnected() { return isConnected; }

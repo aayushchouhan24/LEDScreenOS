@@ -7,3 +7,4 @@ void handleScreenScroll();
 // Programmatic scroll via controller
 void screenScrollUp();
 void screenScrollDown();
+void setLoggerEnabled(bool enabled);

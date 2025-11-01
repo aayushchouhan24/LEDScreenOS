@@ -12,6 +12,7 @@ const int MAX_LINES_ON_SCREEN = (135 - HEADER_HEIGHT) / FONT_HEIGHT; // M5StickC
 std::vector<String> logBuffer;
 int scrollOffset = 0; // How many lines we've scrolled down from the top
 bool screenNeedsRedraw = true;
+static bool loggerEnabled = true;
 
 // --- Function Implementations ---
 
@@ -42,6 +43,7 @@ void initScreenLogger() {
 }
 
 void logToScreen(const String& message) {
+  if (!loggerEnabled) return;
   // Add message to buffer
   if (logBuffer.size() >= MAX_LOG_LINES) {
     logBuffer.erase(logBuffer.begin()); // Remove the oldest message
@@ -95,4 +97,8 @@ void screenScrollDown() {
     scrollOffset++;
     screenNeedsRedraw = true;
   }
+}
+
+void setLoggerEnabled(bool enabled) {
+  loggerEnabled = enabled;
 }
